@@ -38,4 +38,28 @@ router.get('/:id/jobs', async (req, res) => {
   }
 });
 
+// Update client profile
+router.put('/profile', auth, async (req, res) => {
+  try {
+    const updates = req.body;
+    delete updates.password;
+    delete updates.email;
+    delete updates.role;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: updates },
+      { new: true }
+    ).select('-password');
+
+    if (!user || user.role !== 'client') {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: 'Error updating profile' });
+  }
+});
+
 export default router;

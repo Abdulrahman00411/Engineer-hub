@@ -202,4 +202,16 @@ router.put('/bid/:bidId', auth, async (req, res) => {
   }
 });
 
+// Get bids placed by the logged-in freelancer
+router.get('/bids/my-bids', auth, async (req, res) => {
+  try {
+    const bids = await Bid.find({ engineerId: req.user.id })
+      .populate('jobId', 'title category budget status')
+      .sort({ createdAt: -1 });
+    res.json(bids);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching your bids' });
+  }
+});
+
 export default router;

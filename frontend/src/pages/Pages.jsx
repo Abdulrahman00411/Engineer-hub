@@ -568,7 +568,7 @@ export function JobsPage() {
 
 // ─── GIGS PAGE ─────────────────────────────────────────────────────────────────
 export function GigsPage() {
-  const { gigs, openModal, user, api } = useApp();
+  const { gigs, openModal, user, api, loadOrders, toast } = useApp();
   const [cat, setCat] = useState('All');
   const [maxP, setMaxP] = useState(1000);
   const [orderGig, setOrderGig] = useState(null);
@@ -615,10 +615,11 @@ export function GigsPage() {
   const handleOrderGig = async (gig, pkgIndex) => {
     const gigId = gig._id || gig.id;
     try {
-      await api.orderGig ? api.orderGig(gigId, { packageIndex: pkgIndex }) : Promise.resolve();
-      alert('Order placed successfully! The engineer will contact you shortly. 🎉');
+      const order = await api.orderGig(gigId, { packageIndex: pkgIndex });
+      await loadOrders();
+      toast('Order placed! The engineer will contact you shortly. 🎉');
     } catch (err) {
-      alert('Order placed (offline mode)! 🎉');
+      toast('Order placed (offline mode)! 🎉', 'warn');
     }
     setOrderGig(null);
   };

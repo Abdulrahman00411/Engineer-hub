@@ -165,6 +165,28 @@ const SEED_GIGS = [
   }
 ];
 
+// Normalize MongoDB conversation to frontend's expected format
+// MongoDB returns _id (ObjectId) and participants as ObjectId[]
+// Frontend expects: id, participants as string[], engineerName, clientName, etc.
+const normalizeConvo = (c) => ({
+  id: c._id?.toString() || c.id,
+  _id: c._id?.toString(),
+  participants: (c.participants || []).map(p => p.toString()),
+  engineerName: c.engineerName || '',
+  engineerInitials: c.engineerInitials || '',
+  clientName: c.clientName || '',
+  lastMsg: c.lastMsg || '',
+  lastTime: c.lastTime || '',
+  unread: Object.fromEntries((c.unread instanceof Map ? c.unread.entries() : Object.entries(c.unread || {}))),
+  messages: (c.messages || []).map(m => ({
+    id: m.id || m._id?.toString() || m.id,
+    from: m.from?.toString() || m.from || '',
+    text: m.text || '',
+    time: m.time || '',
+    date: m.date || 'Today'
+  }))
+});
+
 function getInitialConvos() {
   return [
     {
@@ -202,6 +224,8 @@ export function AppProvider({ children }) {
   const [gigs, setGigs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eh_gigs')) || SEED_GIGS; } catch { return SEED_GIGS; }
   });
+  const [orders, setOrders] = useState([]);
+  const [myBids, setMyBids] = useState([]);
   const [convos, setConvos] = useState(() => {
     try { return JSON.parse(localStorage.getItem('eh_convos')) || getInitialConvos(); } catch { return getInitialConvos(); }
   });
@@ -257,6 +281,43 @@ export function AppProvider({ children }) {
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
   }, []);
 
+  // Load conversations from API when online and user is logged in
+  const loadConversations = useCallback(async () => {
+    if (!apiOnline || !user) return;
+    try {
+      const apiConvos = await api.getConversations();
+      if (!apiConvos?.length) return;
+
+      const normalized = apiConvos.map(normalizeConvo);
+
+      // Merge: keep local convos that have a local-only id (not in API),
+      // replace/update API convos with real data
+      setConvos(prev => {
+        const localOnly = prev.filter(c => !c._id || !normalized.find(ac => ac._id === c._id));
+        const merged = [...localOnly, ...normalized];
+
+        // Sort by most recent (updatedAt from MongoDB, or lastTime)
+        merged.sort((a, b) => {
+          const timeA = a.lastTime || '';
+          const timeB = b.lastTime || '';
+          return timeB.localeCompare(timeA);
+        });
+
+        return merged;
+      });
+    } catch (err) {
+      // Silent fail — keep using local convos
+    }
+  }, [apiOnline, user]);
+
+  // Poll for new messages every 15 seconds when user is logged in and API is online
+  useEffect(() => {
+    if (!user || !apiOnline) return;
+    const pollMessages = () => loadConversations();
+    const interval = setInterval(pollMessages, 15000);
+    return () => clearInterval(interval);
+  }, [user, apiOnline, loadConversations]);
+
   const login = async (email, password) => {
     if (apiOnline) {
       try {
@@ -264,6 +325,9 @@ export function AppProvider({ children }) {
         localStorage.setItem('eh_token', data.token);
         setUser(data.user);
         toast(`Welcome back, ${data.user.name}! 👋`);
+        // Load real conversations from API on login
+        // Defer slightly so user state is set first
+        setTimeout(() => { loadConversations(); loadMyJobs(); }, 100);
         return null;
       } catch (err) {
         return err.message;
@@ -275,6 +339,8 @@ export function AppProvider({ children }) {
     if (!found) return 'Email or password is incorrect';
     setUser(found);
     toast(`Welcome back, ${found.name}! 👋`);
+    // Load orders and bids on local login
+    setTimeout(() => { loadOrders(); loadMyBids(); loadMyJobs(); }, 100);
     return null;
   };
 
@@ -285,6 +351,8 @@ export function AppProvider({ children }) {
         localStorage.setItem('eh_token', response.token);
         setUser(response.user);
         toast('Account created! Welcome to EngineersHub 🌟');
+        // Load real conversations on register
+        setTimeout(() => { loadConversations(); loadOrders(); loadMyBids(); loadMyJobs(); }, 100);
         return null;
       } catch (err) {
         return err.message;
@@ -329,7 +397,9 @@ export function AppProvider({ children }) {
   const updateProfile = async (updates) => {
     if (apiOnline) {
       try {
-        const updated = await api.updateProfile(updates);
+        const updated = user.role === 'freelancer'
+          ? await api.updateProfile(updates)
+          : await api.updateClientProfile(updates);
         setUser(updated);
         toast('Profile updated successfully ✨');
         return;
@@ -370,10 +440,57 @@ export function AppProvider({ children }) {
     return job;
   };
 
+  const loadMyBids = useCallback(async () => {
+    if (!apiOnline || !user) return;
+    try {
+      const bids = await api.getMyBids();
+      setMyBids(bids || []);
+    } catch {}
+  }, [apiOnline, user]);
+
+  const loadMyJobs = useCallback(async () => {
+    if (!apiOnline || !user) return;
+    try {
+      const jobs = await api.getMyJobs();
+      if (jobs?.length) {
+        setJobs(prev => {
+          // Merge: keep local jobs without _id, add/replace API jobs
+          const localOnly = prev.filter(j => !j._id);
+          const apiIds = new Set(jobs.map(j => j._id?.toString()));
+          const filteredPrev = prev.filter(j => !apiIds.has(j._id?.toString()));
+          return [...filteredPrev, ...jobs];
+        });
+      }
+    } catch {}
+  }, [apiOnline, user]);
+
+  const loadOrders = useCallback(async () => {
+    if (!apiOnline || !user) return;
+    try {
+      const data = await api.getOrders();
+      setOrders(data || []);
+    } catch {}
+  }, [apiOnline, user]);
+
+  const updateOrderStatus = async (orderId, status) => {
+    if (!apiOnline) {
+      setOrders(os => os.map(o => o._id === orderId ? { ...o, status } : o));
+      return;
+    }
+    try {
+      const updated = await api.updateOrderStatus(orderId, status);
+      setOrders(os => os.map(o => (o._id || o.id) === orderId ? { ...o, ...updated } : o));
+      toast(status === 'accepted' ? 'Order accepted! 🎉' : status === 'completed' ? 'Order marked complete! ✅' : 'Status updated');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
   const placeBid = async (jobId, bidData) => {
     if (apiOnline) {
       try {
         await api.placeBid(jobId, bidData);
+        await loadMyBids();
         toast('Bid submitted successfully! 🎉');
         return true;
       } catch (err) {
@@ -415,21 +532,25 @@ export function AppProvider({ children }) {
     const msg = { id: 'm' + Date.now(), from: myId, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), date: 'Today' };
 
     if (existing) {
+      // Existing conversation — optimistic local update
       const existingId = existing._id || existing.id;
       setConvos(cv => cv.map(c => (c._id || c.id) === existingId
         ? { ...c, messages: [...c.messages, msg], lastMsg: text, lastTime: msg.time, unread: { ...c.unread, [toUserId]: (c.unread?.[toUserId] || 0) + 1 } }
         : c
       ));
       setActiveConvo(existingId);
-      // Sync to API
+      // Sync to API and reload full conversation for authoritative state
       if (apiOnline) {
         try {
           await api.sendMessage(existingId, text);
+          await loadConversations();
         } catch (err) { /* silent */ }
       }
     } else {
+      // New conversation — optimistic local update first
+      const localId = 'conv' + Date.now();
       const newConvo = {
-        id: 'conv' + Date.now(),
+        id: localId,
         participants: [myId, toUserId],
         engineerName: isEngineer ? user.name : otherUser.name,
         engineerInitials: isEngineer ? user.avatar?.initials : otherUser.avatar?.initials,
@@ -439,13 +560,17 @@ export function AppProvider({ children }) {
         messages: [msg]
       };
       setConvos(cv => [newConvo, ...cv]);
-      setActiveConvo(newConvo.id);
-      // Sync to API
+      setActiveConvo(localId);
+      // Sync to API — after creation, reload to get real _id and canonical data
       if (apiOnline) {
         try {
           const created = await api.startConversation({ participantId: toUserId, initialMessage: text });
-          // Update with API ID
-          setConvos(cv => cv.map(c => c.id === newConvo.id ? { ...c, _id: created._id } : c));
+          // Replace the local-only conversation with the real API one
+          setConvos(cv => {
+            const normalized = normalizeConvo(created);
+            return cv.map(c => c.id === localId ? normalized : c);
+          });
+          setActiveConvo(created._id?.toString() || created.id);
         } catch (err) { /* silent */ }
       }
     }
@@ -478,6 +603,7 @@ export function AppProvider({ children }) {
       user, login, register, logout, updateProfile,
       engineers, clients, jobs, gigs,
       postJob, saveDraft, deleteDraft, myDrafts, placeBid,
+      orders, myBids, loadOrders, loadMyBids, loadMyJobs, updateOrderStatus,
       convos: myConvos, allConvos: convos, sendMessage, markRead, activeConvo, setActiveConvo, totalUnread,
       page, setPage,
       modal, modalData, openModal, closeModal,

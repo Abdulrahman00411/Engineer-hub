@@ -1,6 +1,7 @@
 import express from 'express';
 import Gig from '../models/Gig.js';
 import User from '../models/User.js';
+import Order from '../models/Order.js';
 import { auth, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -127,25 +128,46 @@ router.get('/engineer/my-gigs', auth, async (req, res) => {
   }
 });
 
-// Order gig (create conversation)
+// Order gig (create order)
 router.post('/:id/order', auth, async (req, res) => {
   try {
     const { packageIndex } = req.body;
     const gig = await Gig.findById(req.params.id);
+    const client = await User.findById(req.user.id);
 
     if (!gig) {
       return res.status(404).json({ error: 'Gig not found' });
     }
 
-    // This would typically create an order and start a conversation
-    // For now, just acknowledge the order request
-    res.json({
-      message: 'Order request received',
-      gig: gig,
-      package: gig.packages[packageIndex],
+    if (client.role !== 'client') {
+      return res.status(403).json({ error: 'Only clients can order gigs' });
+    }
+
+    const selectedPackage = gig.packages[packageIndex];
+    if (!selectedPackage) {
+      return res.status(400).json({ error: 'Invalid package selection' });
+    }
+
+    const order = new Order({
       clientId: req.user.id,
-      engineerId: gig.engineerId
+      engineerId: gig.engineerId,
+      gigId: gig._id,
+      engineerName: gig.engineerName,
+      clientName: client.name,
+      gigTitle: gig.title,
+      package: {
+        name: selectedPackage.name,
+        price: selectedPackage.price,
+        delivery: selectedPackage.delivery,
+        desc: selectedPackage.desc
+      },
+      amount: selectedPackage.price,
+      status: 'pending'
     });
+
+    await order.save();
+
+    res.status(201).json(order);
   } catch (error) {
     res.status(500).json({ error: 'Error processing order' });
   }

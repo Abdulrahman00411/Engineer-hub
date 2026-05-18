@@ -23,6 +23,7 @@ import jobRoutes from './routes/jobs.js';
 import gigRoutes from './routes/gigs.js';
 import messageRoutes from './routes/messages.js';
 import clientRoutes from './routes/clients.js';
+import orderRoutes from './routes/orders.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/engineers', engineerRoutes);
@@ -30,6 +31,7 @@ app.use('/api/jobs', jobRoutes);
 app.use('/api/gigs', gigRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/clients', clientRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

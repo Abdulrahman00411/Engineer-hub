@@ -63,6 +63,11 @@ export const api = {
 
   getJobBids: (jobId) => request(`/jobs/${jobId}/bids`),
 
+  getMyBids: () => request('/jobs/bids/my-bids'),
+
+  acceptBid: (bidId, status) =>
+    request(`/jobs/bid/${bidId}`, { method: 'PUT', body: JSON.stringify({ status }) }),
+
   // Gigs
   getGigs: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -93,9 +98,20 @@ export const api = {
   markRead: (conversationId) =>
     request(`/messages/${conversationId}/read`, { method: 'PUT' }),
 
+  // Orders
+  getOrders: () => request('/orders'),
+
+  getOrder: (id) => request(`/orders/${id}`),
+
+  updateOrderStatus: (id, status) =>
+    request(`/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+
   // Clients
   getClients: () => request('/clients'),
-  getClient: (id) => request(`/clients/${id}`)
+  getClient: (id) => request(`/clients/${id}`),
+
+  updateClientProfile: (data) =>
+    request('/clients/profile', { method: 'PUT', body: JSON.stringify(data) })
 };
 
 export default api;

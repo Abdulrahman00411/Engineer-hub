@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 function EditProfileModal({ onClose }) {
@@ -139,9 +139,183 @@ function EditProfileModal({ onClose }) {
   );
 }
 
+// ─── Client Edit Profile Modal ───────────────────────────────────────────────
+function ClientEditProfileModal({ onClose }) {
+  const { user, updateProfile } = useApp();
+  const [form, setForm] = useState({
+    name: user?.name || '',
+    bio: user?.bio || '',
+    location: user?.location || '',
+    phone: user?.phone || ''
+  });
+  const u = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = () => {
+    updateProfile({
+      name: form.name,
+      bio: form.bio,
+      location: form.location,
+      phone: form.phone
+    });
+    onClose();
+  };
+
+  return (
+    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 480 }}>
+        <div className="modal-hd">
+          <h3>Edit Profile</h3>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ fontFamily: 'var(--font-m)', fontSize: 10, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Company Info</div>
+          <div className="form-group">
+            <label className="form-label">Company Name</label>
+            <input className="form-input" value={form.name} onChange={e => u('name', e.target.value)} placeholder="Your company or organization name" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Bio / Description</label>
+            <textarea className="form-input" rows={3} value={form.bio} onChange={e => u('bio', e.target.value)} placeholder="Tell engineers about your company and projects..." />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="form-group">
+              <label className="form-label">Location</label>
+              <input className="form-input" value={form.location} onChange={e => u('location', e.target.value)} placeholder="City, Country" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input className="form-input" value={form.phone} onChange={e => u('phone', e.target.value)} placeholder="+92-300-1234567" />
+            </div>
+          </div>
+          <button className="btn btn-primary btn-full" onClick={save}>Save Changes ✓</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── View Bids Modal (for clients) ───────────────────────────────────────────
+function ViewBidsModal({ job, onClose }) {
+  const { api, apiOnline, toast } = useApp();
+  const [bids, setBids] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!apiOnline || !job?._id) {
+      setLoading(false);
+      return;
+    }
+    const fetchBids = async () => {
+      try {
+        const data = await api.getJobBids(job._id);
+        setBids(data || []);
+      } catch {
+        toast('Could not load bids', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBids();
+  }, [job, apiOnline]);
+
+  const handleAction = async (bidId, status) => {
+    try {
+      await api.acceptBid(bidId, status);
+      setBids(b => b.map(bid => bid._id === bidId ? { ...bid, status } : bid));
+      toast(status === 'accepted' ? 'Bid accepted! 🎉' : 'Bid rejected');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  const statusBadge = (s) => {
+    if (s === 'pending') return 'badge-blue';
+    if (s === 'accepted') return 'badge-green';
+    return 'badge-gray';
+  };
+
+  return (
+    <div className="modal-bg" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 620 }}>
+        <div className="modal-hd">
+          <div>
+            <h3>Bids on Your Job</h3>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4 }}>{job?.title}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '2rem' }}>Loading bids...</div>
+          ) : bids.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-3)' }}>
+              No bids yet. Check back later!
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {bids.map(bid => (
+                <div key={bid._id} style={{
+                  padding: '1rem', background: 'var(--steel-light)', borderRadius: 'var(--rm)',
+                  border: '1px solid var(--border)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{bid.engineerName}</div>
+                      <div style={{ fontFamily: 'var(--font-m)', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                        {bid.engineerId?.rating ? `★ ${bid.engineerId.rating} (${bid.engineerId.reviews} reviews)` : 'New Engineer'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'var(--font-d)', fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
+                        ${bid.amount}
+                      </div>
+                      {bid.duration > 0 && (
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{bid.duration} days</div>
+                      )}
+                    </div>
+                  </div>
+                  {bid.engineerId?.skills?.length > 0 && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {bid.engineerId.skills.slice(0, 5).map(s => <span key={s} className="tag">{s}</span>)}
+                    </div>
+                  )}
+                  {bid.cover && (
+                    <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 10 }}>
+                      {bid.cover.slice(0, 150)}{bid.cover.length > 150 ? '...' : ''}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className={`badge ${statusBadge(bid.status)}`}>
+                      {bid.status.charAt(0).toUpperCase() + bid.status.slice(1)}
+                    </span>
+                    {bid.status === 'pending' && (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleAction(bid._id, 'rejected')}>
+                          Reject
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => handleAction(bid._id, 'accepted')}>
+                          Accept
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const { user, jobs, myDrafts, deleteDraft, openModal, setPage, logout } = useApp();
+  const { user, jobs, myDrafts, deleteDraft, openModal, setPage, logout, myBids, api, apiOnline, loadMyBids, orders, loadOrders, updateOrderStatus } = useApp();
   const [editProfile, setEditProfile] = useState(false);
+  const [clientEditProfile, setClientEditProfile] = useState(false);
+  const [viewBidsJob, setViewBidsJob] = useState(null);
+
+  useEffect(() => { loadMyBids(); loadOrders(); }, []);
 
   if (!user) return (
     <div className="wrap" style={{ padding: '4rem 0', textAlign: 'center' }}>
@@ -166,6 +340,7 @@ export default function Dashboard() {
   return (
     <div className="wrap" style={{ padding: '2rem 1.5rem' }}>
       {editProfile && <EditProfileModal onClose={() => setEditProfile(false)} />}
+      {clientEditProfile && <ClientEditProfileModal onClose={() => setClientEditProfile(false)} />}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -174,6 +349,7 @@ export default function Dashboard() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {user.role === 'freelancer' && <button className="btn btn-outline btn-sm" onClick={() => setEditProfile(true)}>✏️ Edit Profile</button>}
+          {user.role === 'client' && <button className="btn btn-outline btn-sm" onClick={() => setClientEditProfile(true)}>✏️ Edit Profile</button>}
           {user.role === 'client' && <button className="btn btn-primary btn-sm" onClick={() => openModal('postjob')}>+ Post Job</button>}
         </div>
       </div>
@@ -213,9 +389,11 @@ export default function Dashboard() {
 
           {/* Quick stats */}
           {(() => {
+            const clientOrders = orders.filter(o => String(o.clientId) === String(user._id || user.id));
+            const totalSpent = clientOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
             const statItems = user.role === 'freelancer'
               ? [{ label: 'Rating', val: user.rating || '—' }, { label: 'Jobs Done', val: user.completedJobs || 0 }, { label: 'Earned', val: user.totalEarned || '$0' }]
-              : [{ label: 'Jobs Posted', val: user.postedJobs || myJobs.length }, { label: 'Total Spent', val: user.totalSpent || '$0' }];
+              : [{ label: 'Jobs Posted', val: myJobs.length }, { label: 'Total Spent', val: totalSpent > 0 ? `$${totalSpent}` : (user.totalSpent || '$0') }];
             return (
               <div style={{ display: 'flex', gap: '1.5rem' }}>
                 {statItems.map(s => (
@@ -245,14 +423,23 @@ export default function Dashboard() {
                   Abhi koi job post nahi ki. <button className="btn-ghost" onClick={() => openModal('postjob')} style={{ color: 'var(--accent)' }}>Post karo →</button>
                 </div>
               ) : myJobs.map(j => (
-                <div key={j.id} style={{ padding: '0.75rem', background: 'var(--steel-light)', borderRadius: 'var(--r)', border: '1px solid var(--border)', marginBottom: 8 }}>
+                <div key={j._id || j.id} style={{ padding: '0.75rem', background: 'var(--steel-light)', borderRadius: 'var(--r)', border: '1px solid var(--border)', marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{j.title}</span>
                     <span className="badge badge-green">{j.status}</span>
                   </div>
                   <div style={{ fontFamily: 'var(--font-m)', fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
-                    {j.bids} bids · {j.budget} · {j.posted}
+                    {j.bids || 0} bids · {j.budget} · {j.posted}
                   </div>
+                  {j._id && (
+                    <button
+                      className="btn btn-outline btn-sm mt-2"
+                      style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={() => setViewBidsJob(j)}
+                    >
+                      View Bids →
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -290,6 +477,88 @@ export default function Dashboard() {
               <button className="btn btn-outline btn-full mt-2" onClick={() => setPage('engineers')}>View My Public Profile →</button>
             </div>
           )}
+
+          {/* My Bids (freelancer) */}
+          {user.role === 'freelancer' && (
+            <div className="card card-pad">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h4>My Bids ({myBids.length})</h4>
+                <button className="btn btn-outline btn-sm" onClick={() => loadMyBids()}>↻</button>
+              </div>
+              {myBids.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-3)', fontSize: 13 }}>
+                  Abhi koi bid nahi di. <button className="btn-ghost" onClick={() => setPage('jobs')} style={{ color: 'var(--accent)' }}>Jobs dekho →</button>
+                </div>
+              ) : myBids.map(b => (
+                <div key={b._id} style={{ padding: '0.75rem', background: 'var(--steel-light)', borderRadius: 'var(--r)', border: '1px solid var(--border)', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{b.jobId?.title || 'Job'}</span>
+                    <span className={`badge ${
+                      b.status === 'accepted' ? 'badge-green' :
+                      b.status === 'rejected' ? 'badge-red' : 'badge-blue'
+                    }`}>
+                      {b.status.charAt(0).toUpperCase() + b.status.slice(1)}
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-m)', fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>
+                    ${b.amount} · {b.duration ? `${b.duration} days` : 'No duration'} · {b.jobId?.category || ''}
+                  </div>
+                  {b.cover && (
+                    <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                      {b.cover.slice(0, 80)}{b.cover.length > 80 ? '...' : ''}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Incoming Orders (freelancer) */}
+          {user.role === 'freelancer' && (() => {
+            const incomingOrders = orders.filter(o => String(o.engineerId) === String(user._id || user.id));
+            return (
+              <div className="card card-pad">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h4>Incoming Orders ({incomingOrders.length})</h4>
+                  <button className="btn btn-outline btn-sm" onClick={() => loadOrders()}>↻</button>
+                </div>
+                {incomingOrders.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-3)', fontSize: 13 }}>
+                    Abhi koi order nahi. Gigs se kaam hasil karo!
+                  </div>
+                ) : incomingOrders.map(o => (
+                  <div key={o._id} style={{ padding: '0.75rem', background: 'var(--steel-light)', borderRadius: 'var(--r)', border: '1px solid var(--border)', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{o.gigTitle || 'Gig Order'}</span>
+                      <span className={`badge ${
+                        o.status === 'completed' ? 'badge-green' :
+                        o.status === 'cancelled' ? 'badge-red' :
+                        o.status === 'in-progress' ? 'badge-blue' :
+                        'badge-gray'
+                      }`}>
+                        {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+                      </span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-m)', fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>
+                      ${o.amount} · {o.package?.name || 'Package'} · Client: {o.clientName || 'Client'}
+                    </div>
+                    {o.status === 'pending' && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                        <button className="btn btn-outline btn-sm" onClick={() => updateOrderStatus(o._id, 'cancelled')}>Decline</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => updateOrderStatus(o._id, 'accepted')}>Accept</button>
+                      </div>
+                    )}
+                    {o.status === 'accepted' && (
+                      <button className="btn btn-primary btn-sm mt-2" onClick={() => updateOrderStatus(o._id, 'in-progress')}>Start Work</button>
+                    )}
+                    {o.status === 'in-progress' && (
+                      <button className="btn btn-primary btn-sm mt-2" onClick={() => updateOrderStatus(o._id, 'delivered')}>Mark Delivered</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Right col — Drafts */}
@@ -319,6 +588,7 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+      {viewBidsJob && <ViewBidsModal job={viewBidsJob} onClose={() => setViewBidsJob(null)} />}
     </div>
   );
 }

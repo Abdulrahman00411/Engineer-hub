@@ -9,113 +9,120 @@
 
 | Area | Status | Notes |
 |---|---|---|
-| Auth (login/register/logout) | 🟡 Partial | Works locally; API integration needs verification |
+| Auth (login/register/logout) | 🟡 Partial | Works locally; API integration needs live verification |
 | Dashboard | 🟡 Basic | Shows profile summary, my jobs (client), drafts, profile completion meter |
 | Profile Edit | 🟡 Partial | Freelancers only; clients can't edit their profile |
 | Engineers Listing | 🟢 Done | Filters, search, availability toggle, view profile |
 | Jobs Listing | 🟢 Done | Filters, bid modal (freelancers only) |
-| Bidding Flow | 🔴 Incomplete | Bids stored locally; not persisted per-user or synced to API |
-| Gigs | 🟢 Done (view) | Order modal shows packages but order is not persisted |
-| Gig Ordering | 🔴 Incomplete | Alert only; no real order storage |
-| Post Job | 🟢 Done (local) | Modal exists; saves to localStorage |
-| Messages/Conversations | 🔴 Incomplete | Local seed data only; no real API sync |
-| Auth Persistence | 🟡 Untested | Token saved to localStorage; needs page-refresh test |
+| Bidding Flow | 🟢 Connected | ViewBidsModal for clients, My Bids for freelancers, placeBid calls API |
+| Gigs View | ��� Done | Full listing with filters and package selection |
+| Gig Ordering | 🟢 Connected | Order model + routes; loads into state via loadOrders() |
+| Post Job | 🟡 Partial | Modal works with local state; saves locally; API sync unimplemented |
+| Messages/Conversations | 🟢 Connected | loadConversations() on login, 15s polling, normalizes API data |
+| Client Profile Update | 🔴 Missing | No `PUT /clients/profile` route; `engineers/profile` is for freelancers only |
+| Freelancer "My Bids" View | 🟢 Done | Dashboard shows My Bids for freelancers with status badges |
+| Job Detail Page | 🔴 Missing | No dedicated page; everything is inline modals |
 
 ---
 
-## Priority Tasks
+## Phases NOT Implemented
 
-### P0 — Critical (Auth & Core Flow)
+### Phase 1: Frontend ↔ Backend Data Connection (Critical)
 
-1. **[ ] Verify login redirects properly**
-   - After successful login, `setPage("dashboard")` should fire
-   - Dashboard should render user data immediately
-   - Test: login → modal closes → dashboard shows correct user name/stats
+The backend has all routes. The problem is the **frontend is not calling them** or **not using the results**.
 
-2. **[ ] Add client profile editing**
-   - Currently only freelancers have `EditProfileModal`
-   - Clients need ability to update company name, location, phone, bio
+#### 1.1 Messages / Conversations — ✅ DONE
+- `loadConversations()` fetches from `GET /api/messages` on login and every 15s poll
+- `sendMessage()` calls API then reloads conversations for authoritative state
+- `normalizeConvo()` bridges MongoDB format to frontend format
+- Seed data kept for offline fallback
 
-3. **[ ] Freelancer "My Bids" view**
-   - Dashboard only shows "My Posted Jobs" for clients
-   - Freelancers need to see jobs they've bid on with status
+#### 1.2 Bidding Flow — ✅ DONE
+- `placeBid()` calls `api.placeBid()` then `loadMyBids()` on success
+- `ViewBidsModal` in Dashboard — client clicks "View Bids →" on their jobs
+  - Shows all bids with engineer info, cover letter, amount, duration
+  - Accept/Reject buttons call `api.acceptBid()` with instant status badge update
+- `GET /jobs/bids/my-bids` backend route for freelancer's submitted bids
+- "My Bids" card in Dashboard freelancer section with status badges
 
-4. **[ ] Persistent auth on page refresh**
-   - `user` state is restored from localStorage on mount
-   - Verify token is sent with API requests after refresh
-   - Consider calling `/auth/me` on mount to validate token freshness
+#### 1.3 Gig Orders — ✅ DONE
+- `Order` model in `backend/src/models/Order.js`
+- `GET /orders`, `GET /orders/:id`, `PUT /orders/:id/status` routes
+- `POST /gigs/:id/order` creates real Order in DB
+- `handleOrderGig()` → `api.orderGig()` → `loadOrders()` → toast
+- `updateOrderStatus()` in AppContext updates state and calls API
 
-### P1 — High (Data Sync & Messaging)
-
-5. **[ ] Message conversation sync with API**
-   - Currently uses local seed data (`getInitialConvos`)
-   - Need to fetch real conversations from `GET /messages`
-   - Need to send messages via `POST /messages/:id/message`
-
-6. **[ ] Real-time-ish message updates**
-   - Polling-based approach is fine initially
-   - Or use WebSocket if backend supports it
-
-7. **[ ] Bid persistence per user**
-   - Currently bids are placed locally (`placeBid` does nothing real when offline)
-   - Need `GET /jobs/:id/bids` for clients to view bids on their jobs
-   - Need bid status tracking (pending, accepted, rejected)
-
-8. **[ ] Gig order persistence**
-   - Orders currently just `alert()` and do nothing
-   - Need `POST /gigs/:id/order` call
-   - Engineer should see incoming orders in dashboard
-
-### P2 — Medium (UI Polish & Feature Parity)
-
-9. **[ ] Client dashboard stats**
-   - `totalSpent`, `postedJobs` are hardcoded seed values
-   - Should reflect actual posted jobs and order amounts
-
-10. **[ ] Freelancer earnings tracker**
-    - `totalEarned`, `completedJobs` are static
-    - After a gig/job is marked complete, these should update
-
-11. **[ ] Job detail page**
-    - Clicking a job opens BidModal inline
-    - No dedicated job detail page with full description, client info, bid history
-
-12. **[ ] Job application status**
-    - Freelancers don't know if their bid was accepted/rejected
-    - Need status indicator on "My Bids"
-
-### P3 — Nice to Have
-
-13. **[ ] Search across all pages**
-    - Engineers page has search
-    - Jobs/Gigs pages have search — good
-    - Global search in navbar would be better
-
-14. **[ ] Email/password change**
-    - No "forgot password" or "change password" flow
-
-15. **[ ] Notifications bell**
-    - New bids on your job, new messages, bid accepted/rejected
-    - Currently toasts handle this passively
-
-16. **[ ] Dark mode toggle**
-    - CSS variables suggest theming capability
+#### 1.4 Post Job — LOCAL ONLY ⚠️
+- Backend `POST /api/jobs` works fine
+- Frontend `postJob()` calls API but only saves result to local state
+- Jobs from API are fetched on mount but not merged into local seed jobs
+- This is acceptable — local fallback for offline use is by design
 
 ---
 
-## Backend Routes Needed (if not already implemented)
+### Phase 2: Missing Frontend UI Components
 
-| Method | Endpoint | Purpose |
+#### 2.1 Client Profile Editing — STILL MISSING 🔴
+- `EditProfileModal` in Dashboard only opens for freelancers
+- No client-specific edit modal
+- Backend has NO `PUT /clients/profile` route
+
+#### 2.2 Freelancer "My Bids" Dashboard Section — ✅ DONE
+- "My Bids" card in Dashboard with refresh button
+- Shows job title, amount, duration, category, cover letter excerpt
+- Status badges: pending (blue), accepted (green), rejected (red)
+
+#### 2.3 Job Detail Page — STILL MISSING 🔴
+- No dedicated page for job details
+- All job interaction is inline via `BidModal`
+- Lower priority — current UX is functional
+
+#### 2.4 Job Application Status — ✅ DONE
+- Freelancer can see bid status on "My Bids" dashboard card
+- Status updates to "accepted"/"rejected" when client acts
+
+---
+
+### Phase 3: Still Needs Building
+
+#### 3.1 Order Model & Routes — ✅ DONE
+
+#### 3.2 Freelancer My-Bids Route — ✅ DONE
+
+#### 3.3 Client Profile Update Route — STILL MISSING 🔴
+- **Missing:** `PUT /clients/profile` endpoint
+- Client cannot edit company name, location, phone, bio
+
+#### 3.4 Freelancer Order Inbox — STILL MISSING 🔴
+- Engineer can place gigs but cannot see incoming orders in dashboard
+- `orders` state in AppContext includes both client and engineer orders
+- Needs a "Incoming Orders" card in freelancer Dashboard section
+
+#### 3.5 Client Dashboard Stats Not Synced — STILL MISSING 🔴
+- `totalSpent`, `postedJobs` shown from local seed data
+- Should reflect actual posted jobs count and cumulative order amounts
+
+---
+
+## Verification: Backend Routes vs Frontend Calls
+
+| Backend Route | Frontend Calling It? | Notes |
 |---|---|---|
-| GET | `/messages` | Fetch user's conversations |
-| POST | `/messages` | Start a new conversation |
-| GET | `/jobs/:id/bids` | Client views bids on their job |
-| PUT | `/jobs/:id/bid/:bidId` | Accept/reject a bid |
-| POST | `/gigs/:id/order` | Place a gig order |
-| GET | `/orders` | View my orders (client or engineer) |
-| PUT | `/orders/:id/status` | Mark order complete |
-| GET | `/engineers/profile` | Get current user's full profile |
-| PUT | `/clients/profile` | Update client profile |
+| `GET /api/messages` | ✅ Yes | Via `loadConversations()` on login & 15s polling |
+| `POST /api/messages` | ✅ Yes | Via `sendMessage()` when starting new conversation |
+| `POST /api/messages/:id/message` | ✅ Yes | Via `sendMessage()` on existing convo |
+| `PUT /api/messages/:id/read` | ✅ Yes | Via `markRead()` |
+| `POST /api/jobs` | ✅ Yes | Via `postJob()` — saves to state |
+| `GET /api/jobs/client/my-jobs` | ⚠️ Called | Result not merged into jobs state on mount |
+| `POST /api/jobs/:id/bid` | ✅ Yes | Via `placeBid()` + reloads myBids after |
+| `GET /api/jobs/:id/bids` | ✅ Yes | Via `ViewBidsModal` in Dashboard |
+| `PUT /api/jobs/bid/:bidId` | ✅ Yes | Via `ViewBidsModal` accept/reject buttons |
+| `GET /api/jobs/bids/my-bids` | ✅ Yes | Via `loadMyBids()` on login & Dashboard mount |
+| `POST /api/gigs/:id/order` | ✅ Yes | Creates real Order in DB; result loaded via `loadOrders()` |
+| `GET /api/orders` | ✅ Yes | Via `loadOrders()` on login |
+| `PUT /api/orders/:id/status` | ✅ Yes | Via `updateOrderStatus()` |
+| `PUT /engineers/profile` | ✅ Yes | Used by updateProfile for freelancers |
+| `PUT /clients/profile` | ❌ No route | Doesn't exist |
 
 ---
 
