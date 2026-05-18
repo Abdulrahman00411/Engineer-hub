@@ -66,5 +66,5 @@ const getConnectionInfo = () => {
   };
 };
 
-export { connectDB, disconnectDB, isConnected, getConnectionInfo, mongoConfig };
+export { connectDB, disconnectDB, isConnected, getConnectionInfo };
 export default connectDB;

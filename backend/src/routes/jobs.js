@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Job from '../models/Job.js';
 import Bid from '../models/Bid.js';
 import User from '../models/User.js';
@@ -123,7 +124,7 @@ router.post('/:id/bid', auth, async (req, res) => {
     }
 
     // Check if already bid
-    const existingBid = await Bid.findOne({ jobId: job._id, engineerId: req.user.id });
+    const existingBid = await Bid.findOne({ jobId: job._id, engineerId: new mongoose.Types.ObjectId(req.user.id) });
     if (existingBid) {
       return res.status(400).json({ error: 'You have already placed a bid on this job' });
     }
@@ -132,7 +133,7 @@ router.post('/:id/bid', auth, async (req, res) => {
 
     const bid = new Bid({
       jobId: job._id,
-      engineerId: req.user.id,
+      engineerId: new mongoose.Types.ObjectId(req.user.id),
       engineerName: user.name,
       amount,
       duration,

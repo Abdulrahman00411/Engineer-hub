@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import { auth } from '../middleware/auth.js';
@@ -9,7 +10,7 @@ const router = express.Router();
 router.get('/', auth, async (req, res) => {
   try {
     const conversations = await Conversation.find({
-      participants: req.user.id
+      participants: new mongoose.Types.ObjectId(req.user.id)
     }).sort({ updatedAt: -1 });
 
     res.json(conversations);
@@ -28,7 +29,7 @@ router.get('/:conversationId', auth, async (req, res) => {
     }
 
     // Check if user is participant
-    if (!conversation.participants.includes(req.user.id)) {
+    if (!conversation.participants.some(p => p.toString() === req.user.id)) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
@@ -45,7 +46,7 @@ router.post('/', auth, async (req, res) => {
 
     // Check if conversation already exists
     let conversation = await Conversation.findOne({
-      participants: { $all: [req.user.id, participantId] }
+      participants: { $all: [new mongoose.Types.ObjectId(req.user.id), new mongoose.Types.ObjectId(participantId)] }
     });
 
     if (!conversation) {
@@ -58,7 +59,7 @@ router.post('/', auth, async (req, res) => {
       };
 
       conversation = new Conversation({
-        participants: [req.user.id, participantId],
+        participants: [new mongoose.Types.ObjectId(req.user.id), new mongoose.Types.ObjectId(participantId)],
         lastMsg: initialMessage,
         lastTime: msg.time,
         unread: {
@@ -105,7 +106,7 @@ router.post('/:conversationId/message', auth, async (req, res) => {
     }
 
     // Check if user is participant
-    if (!conversation.participants.includes(req.user.id)) {
+    if (!conversation.participants.some(p => p.toString() === req.user.id)) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 

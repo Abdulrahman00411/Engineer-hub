@@ -24,8 +24,7 @@ export default function AuthModal() {
   const handleLogin = async () => {
     if (!form.email || !form.password) return setErr("fill all field");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    const error = login(form.email, form.password);
+    const error = await login(form.email, form.password);
     if (error) setErr(error);
     else {
       closeModal();
@@ -50,7 +49,7 @@ export default function AuthModal() {
       return setErr("Select Engineering category");
     setLoading(true);
     await new Promise((r) => setTimeout(r, 700));
-    const error = register({ ...form, role, engineeringField: form.category });
+    const error = await register({ ...form, role, engineeringField: form.category });
     if (error) {
       setErr(error);
       setLoading(false);

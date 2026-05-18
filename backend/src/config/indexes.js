@@ -53,7 +53,7 @@ const createJobIndexes = async () => {
     await Job.collection.createIndex({ createdAt: -1 });
 
     // Field-based queries
-    await Job.collection.createIndex({ engineeringField: 1 });
+    await Job.collection.createIndex({ category: 1 });
 
     // Text search on title and description
     await Job.collection.createIndex(

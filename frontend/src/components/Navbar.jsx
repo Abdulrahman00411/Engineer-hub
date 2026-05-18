@@ -83,7 +83,6 @@ export default function Navbar() {
           ) : (
             <>
               <button className="btn btn-outline btn-sm" onClick={() => openModal('auth')}>Sign In</button>
-              <button className="btn btn-primary btn-sm" onClick={() => openModal('auth')}>Join Free</button>
             </>
           )}
         </div>
