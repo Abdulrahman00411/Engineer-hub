@@ -1,70 +1,51 @@
-import mongoose from 'mongoose';
-import { createAllIndexes } from './indexes.js';
+import { PrismaClient } from '@prisma/client';
 
-// MongoDB Connection Options
-const mongoOptions = {
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-};
+const prisma = new PrismaClient({
+  log: ['error', 'warn'],
+});
 
-// Connection event handlers
-const onConnected = () => {
-  console.log('MongoDB reconnected');
-};
-
-const onDisconnected = () => {
-  console.warn('MongoDB disconnected. Attempting to reconnect...');
-};
-
-const onError = (err) => {
-  console.error('MongoDB connection error:', err);
-};
-
-// Connect to MongoDB - reads MONGO_URI at call time (after dotenv loads)
-const connectDB = async () => {
-  try {
-    const uri = process.env.MONGO_URI;
-    if (!uri) {
-      throw new Error('MONGO_URI environment variable is not set');
+// Connect to PostgreSQL via Prisma
+const connectDB = async (retries = 5) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await prisma.$connect();
+      console.log('PostgreSQL Connected via Prisma');
+      return prisma;
+    } catch (error) {
+      console.error(`PostgreSQL connection attempt ${i + 1} failed:`, error.message);
+      if (i < retries - 1) {
+        console.log(`Retrying in 5 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } else {
+        throw error;
+      }
     }
-    const conn = await mongoose.connect(uri, mongoOptions);
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-
-    // Handle connection events
-    mongoose.connection.on('error', onError);
-    mongoose.connection.on('disconnected', onDisconnected);
-    mongoose.connection.on('reconnected', onConnected);
-
-    // Create database indexes for optimized queries
-    await createAllIndexes();
-
-    return conn;
-  } catch (error) {
-    console.error('MongoDB connection error:', error.message);
-    console.log('Retrying connection in 5 seconds...');
-    setTimeout(connectDB, 5000);
   }
 };
 
 // Graceful shutdown helper
 const disconnectDB = async () => {
-  await mongoose.connection.close();
+  await prisma.$disconnect();
 };
 
 // Check database connection status
-const isConnected = () => {
-  return mongoose.connection.readyState === 1;
+const isConnected = async () => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 // Get connection info
 const getConnectionInfo = () => {
-  const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
   return {
-    state: states[mongoose.connection.readyState],
-    host: mongoose.connection.host,
-    name: mongoose.connection.name
+    state: 'connected',
+    provider: 'postgresql',
+    database: process.env.DATABASE_URL ? 'configured' : 'not configured'
   };
 };
 
-export { connectDB, disconnectDB, isConnected, getConnectionInfo };
+export { connectDB, disconnectDB, isConnected, getConnectionInfo, prisma };
 export default connectDB;

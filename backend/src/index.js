@@ -12,8 +12,29 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// CORS configuration - allow all localhost ports in development
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    // Allow any localhost origin in development
+    if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      return callback(null, true);
+    }
+    // In development, allow all origins
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'X-Requested-With'],
+  preflightContinue: false
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes
@@ -24,6 +45,7 @@ import gigRoutes from './routes/gigs.js';
 import messageRoutes from './routes/messages.js';
 import clientRoutes from './routes/clients.js';
 import orderRoutes from './routes/orders.js';
+import adminRoutes from './routes/admin.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/engineers', engineerRoutes);
@@ -32,6 +54,7 @@ app.use('/api/gigs', gigRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

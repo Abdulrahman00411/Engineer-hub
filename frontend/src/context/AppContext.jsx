@@ -256,6 +256,17 @@ export function AppProvider({ children }) {
             if (gigData?.length) setGigs(gigData);
             if (clientData?.length) setClients(clientData);
           } catch {}
+          // Restore session if token exists
+          const token = localStorage.getItem('eh_token');
+          if (token) {
+            try {
+              const userData = await api.getMe();
+              setUser(userData);
+            } catch {
+              // Token invalid, clear it
+              localStorage.removeItem('eh_token');
+            }
+          }
         }
       } catch {
         setApiOnline(false);

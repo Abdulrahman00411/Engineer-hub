@@ -1,8 +1,5 @@
 import express from 'express';
-import mongoose from 'mongoose';
-import Job from '../models/Job.js';
-import Bid from '../models/Bid.js';
-import User from '../models/User.js';
+import { prisma } from '../config/database.js';
 import { auth, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -12,30 +9,27 @@ router.get('/', optionalAuth, async (req, res) => {
   try {
     const { category, type, search, status } = req.query;
 
-    let query = {};
+    const where = {};
 
     if (category && category !== 'All') {
-      query.category = category;
+      where.category = category;
     }
 
     if (type && type !== 'All') {
-      query.type = type;
+      where.type = type;
     }
 
     if (status) {
-      query.status = status;
+      where.status = status;
     }
 
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    const jobs = await Job.find(query).sort({ createdAt: -1 });
+    const jobs = await prisma.job.findMany({
+      where,
+      orderBy: { createdAt: 'desc' }
+    });
     res.json(jobs);
   } catch (error) {
+    console.error('Error fetching jobs:', error);
     res.status(500).json({ error: 'Error fetching jobs' });
   }
 });
@@ -43,12 +37,15 @@ router.get('/', optionalAuth, async (req, res) => {
 // Get single job
 router.get('/:id', async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id);
+    const job = await prisma.job.findUnique({
+      where: { id: req.params.id }
+    });
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
     res.json(job);
   } catch (error) {
+    console.error('Error fetching job:', error);
     res.status(500).json({ error: 'Error fetching job' });
   }
 });
@@ -56,7 +53,9 @@ router.get('/:id', async (req, res) => {
 // Create job
 router.post('/', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
     if (!user || user.role !== 'client') {
       return res.status(403).json({ error: 'Only clients can post jobs' });
     }
@@ -67,31 +66,34 @@ router.post('/', auth, async (req, res) => {
       ? `$${budgetMin}${budgetMax ? '-' + budgetMax : ''}`
       : `$${hourlyRate}/hr`;
 
-    const job = new Job({
-      clientId: req.user.id,
-      clientName: user.name,
-      title,
-      category,
-      type,
-      budget,
-      budgetMin,
-      budgetMax,
-      hourlyRate,
-      level,
-      location,
-      tags: tags || [],
-      description,
-      deadline,
-      urgent,
-      posted: new Date().toISOString().split('T')[0],
-      bids: 0,
-      status: 'open'
+    const job = await prisma.job.create({
+      data: {
+        clientId: req.user.id,
+        clientName: user.name,
+        title,
+        category,
+        type: type || 'Fixed Price',
+        budget,
+        budgetMin: budgetMin || 0,
+        budgetMax: budgetMax || 0,
+        hourlyRate: hourlyRate || 0,
+        level: level || 'Intermediate',
+        location: location || '',
+        tags: tags || [],
+        description: description || '',
+        deadline: deadline || '',
+        urgent: urgent || false,
+        posted: new Date().toISOString().split('T')[0],
+        bidsCount: 0,
+        status: 'open'
+      }
     });
 
-    await job.save();
-
     // Update client's postedJobs count
-    await User.findByIdAndUpdate(req.user.id, { $inc: { postedJobs: 1 } });
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { postedJobs: { increment: 1 } }
+    });
 
     res.status(201).json(job);
   } catch (error) {
@@ -103,9 +105,13 @@ router.post('/', auth, async (req, res) => {
 // Get jobs by client
 router.get('/client/my-jobs', auth, async (req, res) => {
   try {
-    const jobs = await Job.find({ clientId: req.user.id }).sort({ createdAt: -1 });
+    const jobs = await prisma.job.findMany({
+      where: { clientId: req.user.id },
+      orderBy: { createdAt: 'desc' }
+    });
     res.json(jobs);
   } catch (error) {
+    console.error('Error fetching client jobs:', error);
     res.status(500).json({ error: 'Error fetching client jobs' });
   }
 });
@@ -113,38 +119,55 @@ router.get('/client/my-jobs', auth, async (req, res) => {
 // Place bid on job
 router.post('/:id/bid', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
     if (!user || user.role !== 'freelancer') {
       return res.status(403).json({ error: 'Only engineers can place bids' });
     }
 
-    const job = await Job.findById(req.params.id);
+    const job = await prisma.job.findUnique({
+      where: { id: req.params.id }
+    });
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
 
+    // Prevent bidding on own job
+    if (job.clientId === req.user.id) {
+      return res.status(400).json({ error: 'Cannot bid on your own job' });
+    }
+
     // Check if already bid
-    const existingBid = await Bid.findOne({ jobId: job._id, engineerId: new mongoose.Types.ObjectId(req.user.id) });
+    const existingBid = await prisma.bid.findFirst({
+      where: {
+        jobId: job.id,
+        engineerId: req.user.id
+      }
+    });
     if (existingBid) {
       return res.status(400).json({ error: 'You have already placed a bid on this job' });
     }
 
     const { amount, duration, cover } = req.body;
 
-    const bid = new Bid({
-      jobId: job._id,
-      engineerId: new mongoose.Types.ObjectId(req.user.id),
-      engineerName: user.name,
-      amount,
-      duration,
-      cover,
-      status: 'pending'
+    const bid = await prisma.bid.create({
+      data: {
+        jobId: job.id,
+        engineerId: req.user.id,
+        engineerName: user.name,
+        amount: amount || 0,
+        duration: duration || 0,
+        cover: cover || '',
+        status: 'pending'
+      }
     });
 
-    await bid.save();
-
     // Update job bids count
-    await Job.findByIdAndUpdate(job._id, { $inc: { bids: 1 } });
+    await prisma.job.update({
+      where: { id: job.id },
+      data: { bidsCount: { increment: 1 } }
+    });
 
     res.status(201).json(bid);
   } catch (error) {
@@ -156,19 +179,36 @@ router.post('/:id/bid', auth, async (req, res) => {
 // Get bids for a job
 router.get('/:id/bids', auth, async (req, res) => {
   try {
-    const job = await Job.findById(req.params.id);
+    const job = await prisma.job.findUnique({
+      where: { id: req.params.id }
+    });
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
 
     // Only job owner can see bids
-    if (job.clientId.toString() !== req.user.id) {
+    if (job.clientId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const bids = await Bid.find({ jobId: job._id }).populate('engineerId', 'name rating reviews skills avatar');
+    const bids = await prisma.bid.findMany({
+      where: { jobId: job.id },
+      include: {
+        engineer: {
+          select: {
+            id: true,
+            name: true,
+            rating: true,
+            reviews: true,
+            skills: true,
+            avatar: true
+          }
+        }
+      }
+    });
     res.json(bids);
   } catch (error) {
+    console.error('Error fetching bids:', error);
     res.status(500).json({ error: 'Error fetching bids' });
   }
 });
@@ -177,27 +217,36 @@ router.get('/:id/bids', auth, async (req, res) => {
 router.put('/bid/:bidId', auth, async (req, res) => {
   try {
     const { status } = req.body;
-    const bid = await Bid.findById(req.params.bidId);
+    const bid = await prisma.bid.findUnique({
+      where: { id: req.params.bidId }
+    });
 
     if (!bid) {
       return res.status(404).json({ error: 'Bid not found' });
     }
 
-    const job = await Job.findById(bid.jobId);
-    if (!job || job.clientId.toString() !== req.user.id) {
+    const job = await prisma.job.findUnique({
+      where: { id: bid.jobId }
+    });
+    if (!job || job.clientId !== req.user.id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    bid.status = status;
-    await bid.save();
+    const updatedBid = await prisma.bid.update({
+      where: { id: req.params.bidId },
+      data: { status }
+    });
 
     if (status === 'accepted') {
-      job.status = 'in-progress';
-      await job.save();
+      await prisma.job.update({
+        where: { id: job.id },
+        data: { status: 'in-progress' }
+      });
     }
 
-    res.json(bid);
+    res.json(updatedBid);
   } catch (error) {
+    console.error('Error updating bid:', error);
     res.status(500).json({ error: 'Error updating bid' });
   }
 });
@@ -205,11 +254,24 @@ router.put('/bid/:bidId', auth, async (req, res) => {
 // Get bids placed by the logged-in freelancer
 router.get('/bids/my-bids', auth, async (req, res) => {
   try {
-    const bids = await Bid.find({ engineerId: req.user.id })
-      .populate('jobId', 'title category budget status')
-      .sort({ createdAt: -1 });
+    const bids = await prisma.bid.findMany({
+      where: { engineerId: req.user.id },
+      include: {
+        job: {
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            budget: true,
+            status: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
     res.json(bids);
   } catch (error) {
+    console.error('Error fetching your bids:', error);
     res.status(500).json({ error: 'Error fetching your bids' });
   }
 });

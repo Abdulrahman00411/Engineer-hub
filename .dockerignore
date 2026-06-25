@@ -1,0 +1,26 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+build
+coverage
+
+# VCS
+.git
+.gitignore
+
+# Env files
+.env
+.env.*
+
+# OS files
+.DS_Store
+
+# Editor/IDE
+.vscode
+.idea
+
+# Docker files (optional)
+Dockerfile
+
