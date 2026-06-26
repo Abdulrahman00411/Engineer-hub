@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import EngineerProfile from './EngineerProfile';
 
 function EditProfileModal({ onClose }) {
   const { user, updateProfile } = useApp();
@@ -310,10 +311,11 @@ function ViewBidsModal({ job, onClose }) {
 }
 
 export default function Dashboard() {
-  const { user, jobs, myDrafts, deleteDraft, openModal, setPage, logout, myBids, api, apiOnline, loadMyBids, orders, loadOrders, updateOrderStatus } = useApp();
+  const { user, jobs, myDrafts, deleteDraft, openModal, setPage, logout, myBids, api, apiOnline, loadMyBids, orders, loadOrders, updateOrderStatus, engineers } = useApp();
   const [editProfile, setEditProfile] = useState(false);
   const [clientEditProfile, setClientEditProfile] = useState(false);
   const [viewBidsJob, setViewBidsJob] = useState(null);
+  const [viewProfileEng, setViewProfileEng] = useState(null);
 
   useEffect(() => { loadMyBids(); loadOrders(); }, []);
 
@@ -337,10 +339,24 @@ export default function Dashboard() {
     return pts;
   })() : 100;
 
+  // Show engineer profile view when viewing own public profile
+  if (viewProfileEng) {
+    const myEng = engineers.find(e => (e._id || e.id) === viewProfileEng);
+    if (myEng) {
+      return (
+        <div className="wrap" style={{ padding: '1rem 1.5rem' }}>
+          <button className="btn btn-ghost" onClick={() => setViewProfileEng(null)}>← Back to Dashboard</button>
+          <EngineerProfile engineerId={myEng._id || myEng.id} />
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="wrap" style={{ padding: '2rem 1.5rem' }}>
       {editProfile && <EditProfileModal onClose={() => setEditProfile(false)} />}
       {clientEditProfile && <ClientEditProfileModal onClose={() => setClientEditProfile(false)} />}
+      {viewProfileEng && <EngineerProfile engineerId={viewProfileEng} />}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -474,7 +490,7 @@ export default function Dashboard() {
                   <span style={{ color: user.available ? '#4ADE80' : 'var(--text-3)' }}>{user.available ? '✅ Available' : '⛔ Busy'}</span>
                 </div>
               </div>
-              <button className="btn btn-outline btn-full mt-2" onClick={() => setPage('engineers')}>View My Public Profile →</button>
+              <button className="btn btn-outline btn-full mt-2" onClick={() => setViewProfileEng(user._id || user.id)}>View My Public Profile →</button>
             </div>
           )}
 

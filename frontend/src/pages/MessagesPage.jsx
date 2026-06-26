@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 
 export default function MessagesPage() {
-  const { user, convos, sendMessage, markRead, activeConvo, setActiveConvo, engineers, clients } = useApp();
+  const { user, convos, sendMessage, markRead, activeConvo, setActiveConvo } = useApp();
   const [input, setInput] = useState('');
   const bottomRef = useRef(null);
 
