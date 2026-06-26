@@ -76,8 +76,18 @@ export default function Navbar() {
                   {user.avatar?.initials || user.name?.[0]}
                 </div>
                 <span style={{ fontFamily: 'var(--font-m)', fontSize: 11, color: 'var(--text-1)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name?.split(' ')[0]}</span>
+                <span style={{ fontSize: 10, color: user.role === 'admin' ? '#EF4444' : 'var(--text-3)', fontWeight: 600 }}>{user.role === 'admin' ? 'Admin' : user.role === 'freelancer' ? 'Eng' : 'Client'}</span>
                 <span style={{ fontSize: 10, color: 'var(--text-3)' }}>▾</span>
               </button>
+              {/* Admin link */}
+              {user.role === 'admin' && (
+                <button onClick={() => setPage('admin')} style={{
+                  background: page === 'admin' ? 'var(--accent-dim)' : 'var(--steel-light)',
+                  border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '5px 10px',
+                  cursor: 'pointer', fontSize: 12, fontWeight: 600, color: page === 'admin' ? 'var(--accent)' : 'var(--text-2)',
+                  transition: 'all 0.15s'
+                }}>Admin</button>
+              )}
               <button className="btn btn-ghost" onClick={logout} style={{ fontSize: 12, color: 'var(--text-3)' }}>Logout</button>
             </>
           ) : (

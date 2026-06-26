@@ -5,7 +5,7 @@ import Footer from "./components/Footer";
 import AuthModal from "./components/AuthModal";
 import PostJobModal from "./components/PostJobModal";
 import Toasts from "./components/Toasts";
-import { HomePage, EngineersPage, JobsPage, GigsPage } from "./pages/Pages";
+import { HomePage, EngineersPage, JobsPage, GigsPage, AdminPage } from "./pages/Pages";
 import MessagesPage from "./pages/MessagesPage";
 import Dashboard from "./pages/Dashboard";
 
@@ -46,6 +46,7 @@ export default function App() {
         {page === "gigs" && <GigsPage />}
         {page === "messages" && <MessagesPage />}
         {page === "dashboard" && <Dashboard />}
+        {page === "admin" && <AdminPage />}
       </main>
 
       {page === "home" && <Footer />}

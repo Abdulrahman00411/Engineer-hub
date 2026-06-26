@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import EngineerProfile from "./EngineerProfile";
 
@@ -1006,12 +1006,14 @@ export function EngineersPage() {
   const [search, setSearch] = useState("");
   const [avail, setAvail] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [ratingMin, setRatingMin] = useState(0);
 
   const filtered = engineers
     .filter(
       (e) => cat === "All" || e.category === cat || e.engineeringField === cat,
     )
     .filter((e) => !avail || e.available)
+    .filter((e) => !ratingMin || (e.rating || 0) >= ratingMin)
     .filter(
       (e) =>
         !search ||
@@ -1093,6 +1095,33 @@ export function EngineersPage() {
                   Available Only
                 </span>
               </label>
+              <label
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "center",
+                  cursor: "pointer",
+                }}>
+                <span style={{ fontSize: 13, color: "var(--text-2)" }}>
+                  Min Rating:
+                </span>
+                <select
+                  value={ratingMin}
+                  onChange={(e) => setRatingMin(Number(e.target.value))}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 4,
+                    border: "1px solid var(--border)",
+                    background: "var(--bg)",
+                    color: "var(--text-1)",
+                    fontSize: 13,
+                  }}>
+                  <option value={0}>Any</option>
+                  <option value={3}>3+</option>
+                  <option value={4}>4+</option>
+                  <option value={4.5}>4.5+</option>
+                </select>
+              </label>
             </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1156,10 +1185,12 @@ export function JobsPage() {
   const [type, setType] = useState("All");
   const [search, setSearch] = useState("");
   const [bidJob, setBidJob] = useState(null);
+  const [budgetMax, setBudgetMax] = useState(0);
 
   const filtered = jobs
     .filter((j) => cat === "All" || j.category === cat)
     .filter((j) => type === "All" || j.type === type)
+    .filter((j) => !budgetMax || (j.budgetMax || 0) <= budgetMax)
     .filter(
       (j) =>
         !search ||
@@ -1287,6 +1318,33 @@ export function JobsPage() {
                 ))}
               </div>
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--text-3)",
+                  fontFamily: "var(--font-m)",
+                }}>
+                Max Budget:
+              </span>
+              <select
+                value={budgetMax}
+                onChange={(e) => setBudgetMax(Number(e.target.value))}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: 4,
+                  border: "1px solid var(--border)",
+                  background: "var(--bg)",
+                  color: "var(--text-1)",
+                  fontSize: 12,
+                }}>
+                <option value={0}>Any</option>
+                <option value={3000}>$3,000</option>
+                <option value={5000}>$5,000</option>
+                <option value={10000}>$10,000</option>
+                <option value={20000}>$20,000</option>
+              </select>
+            </div>
           </div>
         </div>
         <div
@@ -1324,12 +1382,31 @@ export function JobsPage() {
 export function GigsPage() {
   const { gigs, openModal, user, api, loadOrders, toast } = useApp();
   const [cat, setCat] = useState("All");
-  const [maxP, setMaxP] = useState(1000);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [orderGig, setOrderGig] = useState(null);
+  const PAGE_SIZE = 6;
 
   const filtered = gigs
     .filter((g) => cat === "All" || g.category === cat)
-    .filter((g) => g.startingAt <= maxP);
+    .filter(
+      (g) =>
+        !search ||
+        g.title.toLowerCase().includes(search.toLowerCase()) ||
+        g.description.toLowerCase().includes(search.toLowerCase()) ||
+        (g.tags || []).some((t) =>
+          t.toLowerCase().includes(search.toLowerCase()),
+        ),
+    );
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    if (page > pageCount) {
+      setPage(pageCount);
+    }
+  }, [page, pageCount]);
 
   const GigCard = ({ gig }) => (
     <div
@@ -1578,27 +1655,52 @@ export function GigsPage() {
         <div className="sec-label">Services</div>
         <h2 style={{ marginBottom: "1.5rem" }}>Engineering Gigs</h2>
         <div className="card card-pad" style={{ marginBottom: "1.5rem" }}>
-          <div style={{ marginBottom: "1rem" }}>
-            <div
-              style={{
-                fontFamily: "var(--font-m)",
-                fontSize: 10,
-                color: "var(--text-3)",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                marginBottom: 8,
-              }}>
-              Max Budget: ${maxP}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: "1rem",
+              marginBottom: "1rem",
+            }}>
+            <div className="form-group">
+              <label className="form-label">Search</label>
+              <input
+                className="form-input"
+                placeholder="Title or description..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
-            <input
-              type="range"
-              className="form-input"
-              min="50"
-              max="1000"
-              step="50"
-              value={maxP}
-              onChange={(e) => setMaxP(Number(e.target.value))}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div
+                style={{
+                  fontFamily: "var(--font-m)",
+                  fontSize: 10,
+                  color: "var(--text-3)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                }}>
+                Page {page} of {pageCount}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button
+                  className="btn btn-outline"
+                  style={{ padding: "8px 12px" }}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={page === 1}>
+                  ← Previous
+                </button>
+                <button
+                  className="btn btn-outline"
+                  style={{ padding: "8px 12px" }}
+                  onClick={() =>
+                    setPage((current) => Math.min(pageCount, current + 1))
+                  }
+                  disabled={page === pageCount}>
+                  Next →
+                </button>
+              </div>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {[
@@ -1639,12 +1741,42 @@ export function GigsPage() {
           }}>
           {filtered.length} gigs available
         </div>
-        {filtered.length > 0 ? (
-          <div className="g3">
-            {filtered.map((g) => (
-              <GigCard key={g.id} gig={g} />
-            ))}
-          </div>
+        {pageItems.length > 0 ? (
+          <>
+            <div className="g3">
+              {pageItems.map((g) => (
+                <GigCard key={g.id} gig={g} />
+              ))}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 10,
+                marginTop: "1rem",
+              }}>
+              <button
+                className="btn btn-outline"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page === 1}
+                style={{ padding: "8px 12px" }}>
+                ← Previous
+              </button>
+              <span style={{ fontSize: 12, color: "var(--text-2)" }}>
+                Page {page} of {pageCount}
+              </span>
+              <button
+                className="btn btn-outline"
+                onClick={() =>
+                  setPage((current) => Math.min(pageCount, current + 1))
+                }
+                disabled={page === pageCount}
+                style={{ padding: "8px 12px" }}>
+                Next →
+              </button>
+            </div>
+          </>
         ) : (
           <div
             style={{
@@ -1656,6 +1788,262 @@ export function GigsPage() {
             <h3 style={{ marginTop: "1rem" }}>No gigs found</h3>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN PAGE ───────────────────────────────────────────────────────────────
+export function AdminPage() {
+  const { user, engineers, clients, jobs, gigs, orders, api } = useApp();
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="wrap" style={{ padding: "4rem", textAlign: "center" }}>
+        <div style={{ fontSize: 64, marginBottom: "1rem" }}>🚫</div>
+        <h2>Access Denied</h2>
+        <p style={{ color: "var(--text-2)", marginTop: "0.5rem" }}>
+          You need admin privileges to access this page.
+        </p>
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    const loadStats = async () => {
+      setLoading(true);
+      try {
+        const data = await api.getAdminStats();
+        setStats(data);
+      } catch (error) {
+        console.error("Failed to load admin stats:", error);
+        // Use fallback data from context
+        setStats({
+          stats: {
+            totalUsers: (engineers?.length || 0) + (clients?.length || 0),
+            totalFreelancers: engineers?.length || 0,
+            totalClients: clients?.length || 0,
+            totalJobs: jobs?.length || 0,
+            totalGigs: gigs?.length || 0,
+            totalOrders: orders?.length || 0,
+            totalBids: 0,
+          },
+          recentJobs: jobs?.slice(0, 5) || [],
+          recentOrders: orders?.slice(0, 5) || [],
+          recentUsers: [],
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, [engineers, clients, jobs, gigs, orders]);
+
+  const StatCard = ({ icon, label, value, color }) => (
+    <div
+      className="card card-pad"
+      style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 12,
+          background: color,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 24,
+        }}>
+        {icon}
+      </div>
+      <div>
+        <div
+          style={{
+            fontFamily: "var(--font-d)",
+            fontSize: 28,
+            fontWeight: 800,
+          }}>
+          {loading ? "..." : value}
+        </div>
+        <div
+          style={{
+            fontFamily: "var(--font-m)",
+            fontSize: 11,
+            color: "var(--text-3)",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}>
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="wrap">
+      <div className="sec-label">Admin Dashboard</div>
+      <h2 style={{ marginBottom: "2rem" }}>Platform Overview</h2>
+
+      <div className="g3" style={{ marginBottom: "2rem" }}>
+        <StatCard
+          icon="👥"
+          label="Total Users"
+          value={stats?.stats?.totalUsers || 0}
+          color="rgba(37,99,235,0.15)"
+        />
+        <StatCard
+          icon="👨‍💻"
+          label="Freelancers"
+          value={stats?.stats?.totalFreelancers || 0}
+          color="rgba(14,165,233,0.15)"
+        />
+        <StatCard
+          icon="🏢"
+          label="Clients"
+          value={stats?.stats?.totalClients || 0}
+          color="rgba(139,92,246,0.15)"
+        />
+        <StatCard
+          icon="📋"
+          label="Jobs Posted"
+          value={stats?.stats?.totalJobs || 0}
+          color="rgba(245,158,11,0.15)"
+        />
+        <StatCard
+          icon="🎁"
+          label="Active Gigs"
+          value={stats?.stats?.totalGigs || 0}
+          color="rgba(16,185,129,0.15)"
+        />
+        <StatCard
+          icon="🤝"
+          label="Total Orders"
+          value={stats?.stats?.totalOrders || 0}
+          color="rgba(236,72,153,0.15)"
+        />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "1.5rem",
+        }}>
+        <div className="card card-pad">
+          <h3 style={{ marginBottom: "1rem", fontSize: 16 }}>Recent Jobs</h3>
+          {stats?.recentJobs?.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}>
+              {stats.recentJobs.map((job) => (
+                <div
+                  key={job.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "0.75rem",
+                    background: "var(--steel-light)",
+                    borderRadius: 8,
+                  }}>
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-d)",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}>
+                      {job.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {job.category} ·{" "}
+                      {job.budget || job.budgetMin + "-" + job.budgetMax}
+                    </div>
+                  </div>
+                  <span
+                    className="badge"
+                    style={{
+                      background:
+                        job.status === "open"
+                          ? "rgba(16,185,129,0.15)"
+                          : "rgba(107,114,128,0.15)",
+                      color: job.status === "open" ? "#059669" : "#6B7280",
+                    }}>
+                    {job.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: "var(--text-3)", fontSize: 13 }}>No jobs yet</p>
+          )}
+        </div>
+
+        <div className="card card-pad">
+          <h3 style={{ marginBottom: "1rem", fontSize: 16 }}>Recent Orders</h3>
+          {stats?.recentOrders?.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+              }}>
+              {stats.recentOrders.map((order) => (
+                <div
+                  key={order.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "0.75rem",
+                    background: "var(--steel-light)",
+                    borderRadius: 8,
+                  }}>
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-d)",
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}>
+                      {order.gigTitle}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)" }}>
+                      {order.engineerName} → {order.clientName}
+                    </div>
+                  </div>
+                  <span
+                    className="badge"
+                    style={{
+                      background:
+                        order.status === "completed"
+                          ? "rgba(16,185,129,0.15)"
+                          : order.status === "pending"
+                            ? "rgba(245,158,11,0.15)"
+                            : "rgba(37,99,235,0.15)",
+                      color:
+                        order.status === "completed"
+                          ? "#059669"
+                          : order.status === "pending"
+                            ? "#D97706"
+                            : "#2563EB",
+                    }}>
+                    {order.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: "var(--text-3)", fontSize: 13 }}>
+              No orders yet
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

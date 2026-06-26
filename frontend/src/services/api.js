@@ -111,7 +111,10 @@ export const api = {
   getClient: (id) => request(`/clients/${id}`),
 
   updateClientProfile: (data) =>
-    request('/clients/profile', { method: 'PUT', body: JSON.stringify(data) })
+    request('/clients/profile', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Admin
+  getAdminStats: () => request('/admin/stats')
 };
 
 export default api;

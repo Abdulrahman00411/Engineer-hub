@@ -27,4 +27,65 @@ router.delete('/clear-all', auth, async (req, res) => {
   }
 });
 
+// Get platform statistics - Admin only
+router.get('/stats', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const [
+      totalUsers,
+      totalFreelancers,
+      totalClients,
+      totalJobs,
+      totalGigs,
+      totalOrders,
+      totalBids,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { role: 'freelancer' } }),
+      prisma.user.count({ where: { role: 'client' } }),
+      prisma.job.count(),
+      prisma.gig.count(),
+      prisma.order.count(),
+      prisma.bid.count(),
+    ]);
+
+    // Get recent data
+    const recentJobs = await prisma.job.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const recentOrders = await prisma.order.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const recentUsers = await prisma.user.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      stats: {
+        totalUsers,
+        totalFreelancers,
+        totalClients,
+        totalJobs,
+        totalGigs,
+        totalOrders,
+        totalBids,
+      },
+      recentJobs,
+      recentOrders,
+      recentUsers,
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Error fetching stats' });
+  }
+});
+
 export default router;

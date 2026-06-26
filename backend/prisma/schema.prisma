@@ -10,7 +10,7 @@ datasource db {
 
 model User {
   id              String    @id @default(cuid())
-  role            String    // 'freelancer' or 'client'
+  role            String    // 'freelancer', 'client', or 'admin'
   name            String
   email           String    @unique
   password        String
